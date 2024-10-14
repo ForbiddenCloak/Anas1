@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS vehicles (
     model VARCHAR(255),
     category VARCHAR(255),
     availability VARCHAR(50),
-    rate_3_hours DECIMAL(10, 2),
-    rate_6_hours DECIMAL(10, 2),
-    rate_12_hours DECIMAL(10, 2),
-    rate_24_hours DECIMAL(10, 2),
+    rate_3_hours FLOAT(10, 2),
+    rate_6_hours FLOAT(10, 2),
+    rate_12_hours FLOAT(10, 2),
+    rate_24_hours FLOAT(10, 2),
     status VARCHAR(50) DEFAULT 'Available'
 )
 ''')
@@ -52,9 +52,9 @@ CREATE TABLE IF NOT EXISTS rentals (
     customer_id INT,
     vehicle_id INT,
     duration_hours INT,
-    total_price DECIMAL(10, 2),
+    total_price FLOAT(10, 2),
     actual_return_time VARCHAR(255),
-    late_fee DECIMAL(10, 2),
+    late_fee FLOAT(10, 2),
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id)
 )
@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS rental_history (
     vehicle_model VARCHAR(255),
     rental_start_time VARCHAR(255),
     rental_end_time VARCHAR(255),
-    total_price DECIMAL(10, 2),
-    late_fee DECIMAL(10, 2),
+    total_price FLOAT(10, 2),
+    late_fee FLOAT(10, 2),
     FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
 )
 ''')
@@ -176,16 +176,24 @@ def display_available_vehicles():
 
     if vehicles:
         print("\n--- Available Vehicles ---")
-        print("{:<20} {:<15} {:<12} {:<12} {:<12} {:<12}".format('Model', 'Category', 'Rate (3h)', 'Rate (6h)', 'Rate (12h)', 'Rate (24h)'))
+        print('Model' + ' ' * 5 + 'Category' + ' ' * 2 + 'Rate (3h)' + ' ' * 2 + 'Rate (6h)' + ' ' * 2 + 'Rate (12h)' + ' ' * 2 + 'Rate (24h)')
         print("-" * 80)
 
         for vehicle in vehicles:
             model, category, rate_3h, rate_6h, rate_12h, rate_24h = vehicle
-            print("{:<20} {:<15} ₹{:<11.2f} ₹{:<11.2f} ₹{:<11.2f} ₹{:<11.2f}".format(model, category, rate_3h, rate_6h, rate_12h, rate_24h))
+            print(
+                model + ' ' * (20 - len(model)) +
+                category + ' ' * (15 - len(category)) +
+                '₹' + str(rate_3h).rjust(11) +
+                '₹' + str(rate_6h).rjust(11) +
+                '₹' + str(rate_12h).rjust(11) +
+                '₹' + str(rate_24h).rjust(11)
+            )
 
         print("-" * 80)
     else:
         print("No vehicles are available at the moment.")
+
 
 def rent_vehicle(customer_id):
     display_available_vehicles()
@@ -214,9 +222,10 @@ def rent_vehicle(customer_id):
         cursor.execute("UPDATE vehicles SET status='Rented' WHERE vehicle_id=%s", (vehicle[0],))
         db.commit()
 
-        print("{} rented successfully for {} hours at ₹{}.".format(model, duration_hours, total_price))
+        print(model + " rented successfully for " + str(duration_hours) + " hours at ₹" + str(total_price) + ".")
     else:
         print("Vehicle is not available.")
+
 
 def return_vehicle(customer_id):
     cursor.execute("SELECT * FROM rentals WHERE customer_id=%s AND actual_return_time IS NULL", (customer_id,))
@@ -228,14 +237,17 @@ def return_vehicle(customer_id):
 
     print("\n--- Your Active Rentals ---")
     rentals_list = []
-    rental_index = 1  # Initialize a counter
+    rental_index = 1  
     for rental in rentals:
         cursor.execute("SELECT model FROM vehicles WHERE vehicle_id=%s", (rental[2],))
         vehicle_model = cursor.fetchone()[0]
         rentals_list.append(rental)
-        print("{}. Rental ID: {}, Vehicle: {}, Duration: {} hours, Total Price: ₹{}".format(
-            rental_index, rental[0], vehicle_model, rental[3], rental[4]))
-        rental_index += 1  # Increment the counter
+        print(
+            str(rental_index) + ". Rental ID: " + str(rental[0]) + 
+            ", Vehicle: " + vehicle_model + 
+            ", Duration: " + str(rental[3]) + " hours, Total Price: ₹" + str(rental[4])
+        )
+        rental_index += 1  
 
     selected_idx = input("Enter the number of the rental you want to return: ")
     try:
@@ -266,23 +278,9 @@ def return_vehicle(customer_id):
                       VALUES (%s, %s, %s, %s, %s, %s)''', (customer_id, vehicle_model, 'N/A', 'N/A', rental[4], late_fee))
 
     db.commit()
+    
+    print("Vehicle returned. Late fee: ₹" + str(late_fee))
 
-    print("Vehicle returned. Late fee: ₹{}".format(late_fee))
-
-
-    cursor.execute('''UPDATE rentals SET actual_return_time=%s, late_fee=%s WHERE rental_id=%s''',
-                   ('N/A', late_fee, rental[0]))
-    cursor.execute("UPDATE vehicles SET status='Available' WHERE vehicle_id=%s", (rental[2],))
-
-    cursor.execute("SELECT model FROM vehicles WHERE vehicle_id=%s", (rental[2],))
-    vehicle_model = cursor.fetchone()[0]
-
-    cursor.execute('''INSERT INTO rental_history (customer_id, vehicle_model, rental_start_time, rental_end_time, total_price, late_fee)
-                      VALUES (%s, %s, %s, %s, %s, %s)''', (customer_id, vehicle_model, 'N/A', 'N/A', rental[4], late_fee))
-
-    db.commit()
-
-    print("Vehicle returned. Late fee: ₹{}".format(late_fee))
 
 def view_rented_vehicles(customer_id):
     cursor.execute("SELECT * FROM rentals WHERE customer_id=%s AND actual_return_time IS NULL", (customer_id,))
@@ -293,10 +291,14 @@ def view_rented_vehicles(customer_id):
         for rental in rentals:
             cursor.execute("SELECT model FROM vehicles WHERE vehicle_id=%s", (rental[2],))
             vehicle_model = cursor.fetchone()[0]
-            print("Rental ID: {}, Vehicle: {}, Duration: {} hours, Total Price: ₹{}".format(
-                rental[0], vehicle_model, rental[3], rental[4]))
+            print(
+                "Rental ID: " + str(rental[0]) + 
+                ", Vehicle: " + vehicle_model + 
+                ", Duration: " + str(rental[3]) + " hours, Total Price: ₹" + str(rental[4])
+            )
     else:
         print("No active rentals found.")
+
 
 def view_rental_history(customer_id):
     cursor.execute("SELECT * FROM rental_history WHERE customer_id=%s", (customer_id,))
@@ -305,10 +307,14 @@ def view_rental_history(customer_id):
     if history:
         print("\n--- Your Rental History ---")
         for record in history:
-            print("Vehicle: {}, Total Price: ₹{}, Late Fee: ₹{}".format(
-                record[2], record[5], record[6]))
+            print(
+                "Vehicle: " + record[2] + 
+                ", Total Price: ₹" + str(record[5]) + 
+                ", Late Fee: ₹" + str(record[6])
+            )
     else:
         print("No rental history found.")
+
 
 def admin_login():
     admin_password = input("Enter admin password: ")
@@ -350,7 +356,9 @@ def manage_vehicle_maintenance():
     if vehicles:
         print("\n--- Vehicles for Maintenance Management ---")
         for vehicle in vehicles:
-            print("Vehicle ID: {}, Model: {}, Status: {}".format(vehicle[0], vehicle[1], vehicle[8]))
+            print("Vehicle ID: " + str(vehicle[0]) + 
+                  ", Model: " + vehicle[1] + 
+                  ", Status: " + vehicle[8])
 
         vehicle_id = input("Enter the ID of the vehicle you want to change the status of: ")
         new_status = input("Enter the new status (Available/Maintenance): ")
@@ -365,13 +373,16 @@ def manage_vehicle_maintenance():
     else:
         print("No vehicles available for maintenance management.")
 
+
 def view_all_customers():
     cursor.execute("SELECT * FROM customers")
     customers = cursor.fetchall()
     if customers:
         print("\n--- All Customers ---")
         for customer in customers:
-            print("Customer ID: {}, Name: {}, Phone: {}".format(customer[0], customer[1], customer[2]))
+            print("Customer ID: " + str(customer[0]) + 
+                  ", Name: " + customer[1] + 
+                  ", Phone: " + customer[2])
     else:
         print("No customers found.")
 
@@ -381,10 +392,13 @@ def view_all_vehicles():
     if vehicles:
         print("\n--- All Vehicles ---")
         for vehicle in vehicles:
-            print("Vehicle ID: {}, Model: {}, Category: {}, Status: {}".format(
-                vehicle[0], vehicle[1], vehicle[2], vehicle[8]))
+            print("Vehicle ID: " + str(vehicle[0]) + 
+                  ", Model: " + vehicle[1] + 
+                  ", Category: " + vehicle[2] + 
+                  ", Status: " + vehicle[8])
     else:
         print("No vehicles found.")
+
 
 print("Welcome to Two-Wheeler Rental Manager")
 main_menu()
